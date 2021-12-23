@@ -29,7 +29,6 @@
 
   EPFL CS-472 2021 Final Project Option 2
 */
-
 #pragma once
 
 #include <kitty/constructors.hpp>
@@ -72,18 +71,114 @@ public:
   }
 
   bool run()
-  {
-    /* TODO: write your implementation here */
-    return false;
+  { 
+    //Definition of split_var
+    _st.split_var = compute_splitting_var();
+
+    //Definition of rounds
+    _st.rounds = twopower(N - _st.split_var);
+
+    //Definition of patterns
+    pattern_t patterns(_ntk);
+
+    //Simulation
+    default_simulator<kitty::dynamic_truth_table> sim(_st.split_var);
+    for(auto CNT_round = 0; CNT_round < _st.rounds; CNT_round++)
+    {
+      //Patterns calculation
+      _ntk.foreach_pi( [&]( auto const& pi_const )
+      {
+        kitty::dynamic_truth_table tt (_st.split_var);
+        if(pi_const <= _st.split_var)
+        {
+          kitty::create_nth_var(tt, pi_const - 1);
+        }
+        if (pi_const <= _st.split_var)
+        {
+          patterns[pi_const] = tt;
+        }
+        else 
+        {
+          if ((CNT_round/twopower(pi_const -_st.split_var - 1)) % 2)
+          {
+            patterns[pi_const] = tt;
+          }
+          else
+          {
+            patterns[pi_const] = ~tt;
+          }
+        }
+      } 
+      );
+      //Node simulation
+      simulate_nodes(_ntk, patterns, sim);
+
+      //Verify equivalence between outputs
+      _ntk.foreach_po( [&]( auto const& po_const )
+      {
+        if(_ntk.is_complemented(po_const))
+        {
+          equivalent &= kitty::is_const0(~patterns[po_const]);
+        }
+        else
+        {
+          equivalent &= kitty::is_const0(patterns[po_const]);
+        }
+      }
+      );
+    }
+    return equivalent;
   }
 
 private:
   /* you can add additional methods here */
 
+  uint32_t twopower(uint32_t n)
+  {
+    uint32_t twopowern;
+    if (n <= 0)
+    {
+      twopowern = 1;
+    }
+    else
+    {
+      twopowern = 1;
+      for ( auto i = 1; i <= n; ++i )
+      {
+        twopowern = 2*twopowern;
+      }
+    }
+  return twopowern;
+  }
+
+  uint32_t compute_splitting_var()
+  {
+    uint32_t split_var_calculation = N;
+    if (N > 6)
+    {
+      if (m > N)
+      {
+        while (m > N)
+        {
+          m--;
+        } 
+      }
+      split_var_calculation = m;
+    }
+    return split_var_calculation;
+  }
+
+
+
 private:
   Ntk& _ntk;
   simulation_cec_stats& _st;
   /* you can add other attributes here */
+  uint32_t N = _ntk.num_pis();
+  uint32_t V = _ntk._storage->nodes.size();
+  uint32_t m = log(twopower(29)/V - 32)/log(2) + 3;
+  // uint32_t *ptr_m= &m;
+  bool equivalent;
 };
 
 } // namespace detail
@@ -109,25 +204,25 @@ std::optional<bool> simulation_cec( Ntk const& ntk1, Ntk const& ntk2, simulation
   static_assert( has_foreach_po_v<Ntk>, "Ntk does not implement the foreach_po method" );
   static_assert( has_foreach_node_v<Ntk>, "Ntk does not implement the foreach_node method" );
   static_assert( has_is_complemented_v<Ntk>, "Ntk does not implement the is_complemented method" );
-
+  
   simulation_cec_stats st;
-
+  
   bool result = false;
-
+  
   if ( ntk1.num_pis() > 40 )
     return std::nullopt;
-
+  
   auto ntk_miter = miter<Ntk>( ntk1, ntk2 );
-
+  
   if ( ntk_miter.has_value() )
   {
     detail::simulation_cec_impl p( *ntk_miter, st );
     result = p.run();
   }
-
+  
   if ( pst )
     *pst = st;
-
+  
   return result;
 }
 
